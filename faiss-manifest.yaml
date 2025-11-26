@@ -1,0 +1,125 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: faiss-sa
+  annotations:
+    # GSA와 KSA 연결을 위한 주석
+    iam.gke.io/gcp-service-account: gke-faiss-sa@organic-totem-478708-f3.iam.gserviceaccount.com
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: faiss-config
+data:
+  # GCS가 마운트될 경로 (/data) 기준 설정
+  BASE_INDEX_DIR: "/data/faiss_index"
+  MODEL_DIR: "/data/llm/dragonkue-BGE-m3-ko-local"
+  RERANKER_MODEL_DIR: "/data/llm/dragonkue-bge-reranker-v2-m3-ko-local"
+  AVAILABLE_INDEXES: '["faiss_index_by_sentence_100","faiss_index_by_size_1000"]'
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: faiss-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: faiss-server
+  template:
+    metadata:
+      labels:
+        app: faiss-server
+      annotations:
+        gke-gcsfuse/volumes: "true" # GCS Fuse 활성화
+    spec:
+      serviceAccountName: faiss-sa
+      containers:
+      - name: faiss-server
+        image: asia-northeast3-docker.pkg.dev/organic-totem-478708-f3/llm-repo/faiss-server:v1
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "1000m"
+        envFrom:
+        - configMapRef:
+            name: faiss-config
+        ports:
+        - containerPort: 8000
+
+        # [Probe 설정] 초기 로딩 20분 보호 + 트래픽 제어
+        startupProbe:  # /health가 실패해도 20분간은 재시작하지 않음
+          httpGet:
+            path: /health
+            port: 8000
+          failureThreshold: 60
+          periodSeconds: 20
+        readinessProbe:  # startupProbe 끝나고 실행. 트래픽을 받을래 말래 판단. 준비되면 Ready = True
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          successThreshold: 1
+        livenessProbe:  # startupProbe 끝나고 실행. 컨테이너가 죽었나 살았나 판단. 5회 연속 실패하면 재시작.
+          httpGet:
+            path: /health
+            port: 8000
+          periodSeconds: 20
+          failureThreshold: 5
+
+        volumeMounts:
+        - name: gcs-fuse-csi-ephemeral
+          mountPath: /data
+          readOnly: true
+      volumes:
+      - name: gcs-fuse-csi-ephemeral
+        csi:
+          driver: gcsfuse.csi.storage.gke.io
+          volumeAttributes:
+            bucketName: organic-totem-478708-f3-model-data
+            mountOptions: "implicit-dirs"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: faiss-service
+spec:
+  selector:
+    app: faiss-server
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8000
+  type: LoadBalancer
+---
+# [HPA 고급 설정] 초기 로딩 시 CPU 튀는 것 방지 (Damping)
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: faiss-server
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: faiss-server
+  minReplicas: 1
+  maxReplicas: 3
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 50
+  behavior:
+    scaleUp:
+      policies:
+      - type: Pods
+        value: 1          # 한 번에 최대 1개만 추가
+        periodSeconds: 60 # 1분 간격으로 제한
+    scaleDown:
+      policies:
+      - type: Pods
+        value: 1
+        periodSeconds: 60
