@@ -306,6 +306,9 @@ kubectl get events --sort-by='.lastTimestamp'
 
 # HPA(오토스케일러)인 faiss-server의 이벤트를 확인하는 용도.
 kubectl describe hpa faiss-server
+
+# "테스트가 끝났으니 강제로 파드 수를 줄이고 싶어요" (Scale Down)
+kubectl scale deployment faiss-server --replicas=1
 ```
 
 ---
