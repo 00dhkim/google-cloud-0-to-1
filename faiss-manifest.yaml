@@ -104,7 +104,7 @@ spec:
     kind: Deployment
     name: faiss-server
   minReplicas: 1
-  maxReplicas: 3
+  maxReplicas: 5
   metrics:
   - type: Resource
     resource:
@@ -117,9 +117,9 @@ spec:
       policies:
       - type: Pods
         value: 1          # 한 번에 최대 1개만 추가
-        periodSeconds: 60 # 1분 간격으로 제한
+        periodSeconds: 300 # 5분 간격으로 제한
     scaleDown:
       policies:
       - type: Pods
         value: 1
-        periodSeconds: 60
+        periodSeconds: 300

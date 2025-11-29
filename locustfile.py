@@ -148,14 +148,22 @@ class StepLoadShape(LoadTestShape):
     """
 
     # 시간(초), 사용자 수, 초당 생성 속도
+    # stages = [
+    #     {"duration": 300, "users": 5, "spawn_rate": 1},  # 0~5분: 5명 (Baseline)
+    #     {
+    #         "duration": 900,
+    #         "users": 20,
+    #         "spawn_rate": 1,
+    #     },  # 5~15분: 20명 (HPA Trigger & Wait)
+    #     {"duration": 1500, "users": 40, "spawn_rate": 2},  # 15~25분: 40명 (Max Load)
+    # ]
     stages = [
-        {"duration": 300, "users": 5, "spawn_rate": 1},  # 0~5분: 5명 (Baseline)
-        {
-            "duration": 900,
-            "users": 20,
-            "spawn_rate": 1,
-        },  # 5~15분: 20명 (HPA Trigger & Wait)
-        {"duration": 1500, "users": 40, "spawn_rate": 2},  # 15~25분: 40명 (Max Load)
+        # 0~5분: 저부하, HPA OFF/ON 비교용 기준선
+        {"duration": 60*5, "users": 5, "spawn_rate": 1},
+        # 5~20분: 파드 생성 8분 + 안정화 시간 포함
+        {"duration": 60*20, "users": 20, "spawn_rate": 2},
+        # 20~35분: 더 높은 부하에서 HPA 효과 관찰
+        {"duration": 60*35, "users": 40, "spawn_rate": 4},
     ]
 
     def tick(self):

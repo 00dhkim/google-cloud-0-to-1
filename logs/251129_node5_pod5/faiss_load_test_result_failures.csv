@@ -1,0 +1,4 @@
+Method,Name,Error,Occurrences
+POST,Vector Search,"ConnectionResetError(104, 'Connection reset by peer')",1
+POST,Vector Search,RemoteDisconnected('Remote end closed connection without response'),4
+POST,Keyword Search,RemoteDisconnected('Remote end closed connection without response'),2
